@@ -3,6 +3,8 @@
   <p><strong>Quickly create new File(s) & Folder(s) in Zed Editor with fuzzy directory matching.</strong></p>
   <p>Native macOS port of the popular VS Code extension <a href="https://github.com/HiDeoo/create">HiDeoo/create</a>.</p>
   <p>Made by <strong>irfhakeem</strong> w/ <strong>Antigravity Gemini</strong></p>
+  <br />
+  <img src="assets/preview.png" alt="Zed Create Mac Preview" width="680" />
 </div>
 
 ---
