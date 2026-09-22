@@ -1,0 +1,17 @@
+zed-create
+zed-create-cli
+tests/run_tests
+*.dSYM
+*.o
+.build/
+
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+.idea/
+.vscode/
+.zed/
