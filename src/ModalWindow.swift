@@ -16,16 +16,94 @@ public final class KeyFloatingPanel: NSPanel {
     }
 }
 
+final class ContainerTrackingView: NSView {
+    var onMouseExit: (() -> Void)?
+    private var trackingArea: NSTrackingArea?
+    
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingArea {
+            removeTrackingArea(existing)
+        }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+    
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onMouseExit?()
+    }
+}
+
+final class CustomTableView: NSTableView {
+    var hoveredRow: Int? = nil {
+        didSet {
+            if oldValue != hoveredRow {
+                var toReload = IndexSet()
+                if let old = oldValue, old >= 0 && old < numberOfRows {
+                    toReload.insert(old)
+                }
+                if let new = hoveredRow, new >= 0 && new < numberOfRows {
+                    toReload.insert(new)
+                }
+                if !toReload.isEmpty {
+                    reloadData(forRowIndexes: toReload, columnIndexes: IndexSet(integer: 0))
+                }
+            }
+        }
+    }
+    
+    private var trackingArea: NSTrackingArea?
+    
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingArea {
+            removeTrackingArea(existing)
+        }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+    
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let row = self.row(at: point)
+        hoveredRow = (row >= 0 && row < numberOfRows) ? row : nil
+    }
+    
+    override func mouseExited(with event: NSEvent) {
+        hoveredRow = nil
+    }
+    
+    override func scrollWheel(with event: NSEvent) {
+        super.scrollWheel(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        let row = self.row(at: point)
+        hoveredRow = (row >= 0 && row < numberOfRows) ? row : nil
+    }
+}
+
 public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate {
     public var window: KeyFloatingPanel!
     private var visualEffectView: NSVisualEffectView!
-    private var containerView: NSView!
+    private var containerView: ContainerTrackingView!
     
     private var searchIcon: NSImageView!
     private var searchField: NSTextField!
     private var dividerLine: NSBox!
     private var scrollView: NSScrollView!
-    private var tableView: NSTableView!
+    private var tableView: CustomTableView!
     private var footerView: NSView!
     
     private var step2Container: NSView!
@@ -132,8 +210,11 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
         darkOverlay.borderWidth = 0
         contentView.addSubview(darkOverlay)
         
-        containerView = NSView(frame: contentView.bounds)
+        containerView = ContainerTrackingView(frame: contentView.bounds)
         containerView.autoresizingMask = [.width, .height]
+        containerView.onMouseExit = { [weak self] in
+            self?.tableView.hoveredRow = nil
+        }
         contentView.addSubview(containerView)
         
         setupStep1Views()
@@ -178,7 +259,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
         
-        tableView = NSTableView(frame: scrollView.bounds)
+        tableView = CustomTableView(frame: scrollView.bounds)
         tableView.headerView = nil
         tableView.backgroundColor = .clear
         tableView.selectionHighlightStyle = .none
@@ -318,6 +399,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
     
     private func showStep1() {
         currentStep = .selectDirectory
+        tableView.hoveredRow = nil
         searchIcon.isHidden = false
         searchField.isHidden = false
         dividerLine.isHidden = false
@@ -331,6 +413,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
     
     private func showStep2() {
         currentStep = .enterFileName
+        tableView.hoveredRow = nil
         searchIcon.isHidden = true
         searchField.isHidden = true
         dividerLine.isHidden = true
@@ -359,12 +442,6 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
         if row >= 0 && row < filteredResults.count {
             selectedDirectory = filteredResults[row].path
             showStep2()
-        } else {
-            let typed = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !typed.isEmpty {
-                selectedDirectory = typed.hasPrefix("./") ? typed : "./" + typed
-                showStep2()
-            }
         }
     }
     
@@ -391,24 +468,15 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
         
         if tf == searchField {
             let query = tf.stringValue
-            var results = FuzzyMatcher.match(query: query, candidates: allDirectories)
-            
-            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                let customDir = trimmed.hasPrefix("./") ? trimmed : "./" + trimmed
-                let formatted = customDir.hasSuffix("/") ? customDir : customDir + "/"
-                if !results.contains(where: { $0.path == customDir || $0.path == formatted }) {
-                    results.insert(FuzzyMatchResult(path: formatted, score: 9999, matchedIndices: []), at: 0)
-                }
-            }
-            
-            self.filteredResults = results
-            
+            tableView.hoveredRow = nil
+            self.filteredResults = FuzzyMatcher.match(query: query, candidates: allDirectories)
             self.tableView.reloadData()
             
             if !self.filteredResults.isEmpty {
                 self.tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
                 self.tableView.scrollRowToVisible(0)
+            } else {
+                self.tableView.deselectAll(nil)
             }
         }
     }
@@ -434,6 +502,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
         
         if commandSelector == #selector(NSResponder.moveUp(_:)) {
             if currentStep == .selectDirectory {
+                tableView.hoveredRow = nil
                 let row = tableView.selectedRow
                 if row > 0 {
                     let newRow = row - 1
@@ -446,6 +515,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
         
         if commandSelector == #selector(NSResponder.moveDown(_:)) {
             if currentStep == .selectDirectory {
+                tableView.hoveredRow = nil
                 let row = tableView.selectedRow
                 if row < filteredResults.count - 1 {
                     let newRow = row + 1
@@ -467,6 +537,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
         guard row < filteredResults.count else { return nil }
         let item = filteredResults[row]
         let isSelected = tableView.selectedRow == row
+        let isHovered = self.tableView.hoveredRow == row
         
         let identifier = NSUserInterfaceItemIdentifier("DirRowCell")
         var cell = tableView.makeView(withIdentifier: identifier, owner: self) as? DirRowCellView
@@ -474,7 +545,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
             cell = DirRowCellView(frame: NSRect(x: 0, y: 0, width: tableView.bounds.width, height: 24))
             cell?.identifier = identifier
         }
-        cell?.configure(item: item, isSelected: isSelected)
+        cell?.configure(item: item, isSelected: isSelected, isHovered: isHovered)
         return cell
     }
     
@@ -511,7 +582,6 @@ final class DirRowCellView: NSTableCellView {
     private let label = NSTextField(labelWithString: "")
     private let highlightBg = NSBox()
     
-    private var trackingArea: NSTrackingArea?
     private var item: FuzzyMatchResult?
     private var isSelectedRow: Bool = false
     private var isHovered: Bool = false
@@ -550,28 +620,6 @@ final class DirRowCellView: NSTableCellView {
         label.lineBreakMode = .byTruncatingMiddle
         label.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         textContainer.addSubview(label)
-    }
-    
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        if bounds.contains(point) {
-            return self
-        }
-        return nil
-    }
-    
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let existing = trackingArea {
-            removeTrackingArea(existing)
-        }
-        let newArea = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(newArea)
-        trackingArea = newArea
     }
     
     override func prepareForReuse() {
@@ -631,11 +679,10 @@ final class DirRowCellView: NSTableCellView {
         }
     }
     
-    func configure(item: FuzzyMatchResult, isSelected: Bool) {
-        stopAutoScroll()
-        
+    func configure(item: FuzzyMatchResult, isSelected: Bool, isHovered: Bool) {
         self.item = item
         self.isSelectedRow = isSelected
+        self.isHovered = isHovered
         self.toolTip = item.path
         
         updateHighlight()
@@ -677,6 +724,8 @@ final class DirRowCellView: NSTableCellView {
         
         if isHovered {
             startAutoScrollIfNeeded()
+        } else {
+            stopAutoScroll()
         }
     }
     
@@ -688,20 +737,6 @@ final class DirRowCellView: NSTableCellView {
         } else {
             highlightBg.fillColor = .clear
         }
-    }
-    
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        isHovered = true
-        updateHighlight()
-        startAutoScrollIfNeeded()
-    }
-    
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        isHovered = false
-        updateHighlight()
-        stopAutoScroll()
     }
     
     private func startAutoScrollIfNeeded() {
