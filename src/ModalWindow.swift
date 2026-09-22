@@ -145,7 +145,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
     }
     
     private func setupStep1Views() {
-        searchIcon = NSImageView(frame: NSRect(x: 16, y: 318, width: 18, height: 18))
+        searchIcon = NSImageView(frame: NSRect(x: 16, y: 322, width: 20, height: 18))
         if let img = NSImage(systemSymbolName: "folder", accessibilityDescription: "Search") {
             let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
             searchIcon.image = img.withSymbolConfiguration(config)
@@ -209,7 +209,7 @@ public final class PureModalController: NSObject, NSTextFieldDelegate, NSTableVi
         step2Breadcrumb.textColor = NSColor(red: 0.4, green: 0.7, blue: 1.0, alpha: 1.0)
         step2Container.addSubview(step2Breadcrumb)
         
-        step2Icon = NSImageView(frame: NSRect(x: 16, y: 256, width: 18, height: 18))
+        step2Icon = NSImageView(frame: NSRect(x: 16, y: 257, width: 20, height: 18))
         if let img = NSImage(systemSymbolName: "doc.badge.plus", accessibilityDescription: "File") {
             let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
             step2Icon.image = img.withSymbolConfiguration(config)
