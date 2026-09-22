@@ -55,7 +55,6 @@ task_label = "Create File"
 task_entry = {
     "label": task_label,
     "command": bin_path,
-    "args": ["$ZED_WORKTREE_ROOT", "$ZED_FILE"],
     "reveal": "never",
     "hide": "always",
     "allow_concurrent_runs": False
